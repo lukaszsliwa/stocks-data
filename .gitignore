@@ -1,0 +1,10 @@
+stocks/
+tickers/
+tickers.csv
+.env
+.idea/
+*.csv
+bars/__pycache__/*
+bars/day/__pycache__/*
+bars/hour/__pycache__/*
+bars/minute/__pycache__/*

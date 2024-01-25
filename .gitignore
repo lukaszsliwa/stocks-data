@@ -4,7 +4,9 @@ tickers.csv
 .env
 .idea/
 *.csv
-bars/__pycache__/*
-bars/day/__pycache__/*
-bars/hour/__pycache__/*
-bars/minute/__pycache__/*
+provider/polygon/bars/__pycache__/*
+provider/polygon/bars/day/__pycache__/*
+provider/polygon/bars/hour/__pycache__/*
+provider/polygon/bars/minute/__pycache__/*
+provider/__pycache__
+provider/polygon/__pycache__

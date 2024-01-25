@@ -1,12 +1,14 @@
-import datetime
-import csv
 import glob
 import tqdm
 import json
+import datetime
+import csv
+import os
+import requests
 
 class Base:
     def __init__(self, progressbar=True, api_key=None, data_dir=None, tickers_file=None, ticker=None, timeframe=None,
-                 from_year=None, to_year=None, force=None, limit=5000, tickers=list()):
+                 from_date=None, to_date=None, force=None, limit=50000, tickers=list()):
         self.api_key = api_key
         self.data_dir = data_dir
         self.tickers_file = tickers_file
@@ -14,11 +16,18 @@ class Base:
         self.tickers = tickers
         self.timeframe = timeframe
         self.multiplier = int(timeframe[:-1])
-        self.from_year = from_year
-        self.to_year = to_year
+        self.from_date = from_date
+        self.to_date = to_date
         self.force = force
         self.limit = limit
         self.progressbar = progressbar
+
+        if timeframe[-1] == 'd':
+            self.frame = 'day'
+        elif timeframe[-1] == 'm':
+            self.frame = 'minute'
+        elif timeframe[-1] == 'h':
+            self.frame = 'hour'
 
         if self.tickers:
             self.tickers = self.tickers.split(',')
@@ -33,6 +42,43 @@ class Base:
 
         if self.ticker:
             self.tickers = [self.ticker]
+
+    def perform(self):
+        start = datetime.datetime.strptime(self.from_date, '%Y-%m-%d')
+        end = datetime.datetime.strptime(self.to_date, '%Y-%m-%d')
+
+        from_ = start.strftime('%Y-%m-%d')
+        to_ = end.strftime('%Y-%m-%d')
+
+        if self.progressbar:
+            self.progressbar = tqdm.tqdm(total=len(self.tickers))
+
+        for ticker in self.tickers:
+            if self.progressbar:
+                self.progressbar.set_description(f'{ticker} {self.timeframe}')
+
+            ticker_path = f'{self.data_dir}/{self.timeframe}/{ticker}/{from_}/{to_}'.replace(':', '_')
+            os.makedirs(ticker_path, exist_ok=True)
+
+            if not self.force and os.path.exists(ticker_path):
+                continue
+
+            aggs_url = f'https://api.polygon.io/v2/aggs/ticker/{ticker}/range/{self.multiplier}/{self.frame}/{from_}/{to_}?adjusted=true&sort=asc&limit={self.limit}&apiKey={self.api_key}'
+
+            index = 0
+            while True:
+                response = json.loads(requests.get(aggs_url).text)
+                with open(f'{ticker_path}/{index}.json', 'w') as f:
+                    json.dump(response, f)
+
+                if 'next_url' in response:
+                    aggs_url = response['next_url'] + f'&adjusted=true&sort=asc&limit={self.limit}&apiKey={self.api_key}'
+                else:
+                    break
+                index += 1
+
+            if self.progressbar:
+                self.progressbar.update()
 
     def save(self):
         for ticker in self.tickers:
@@ -63,39 +109,3 @@ class Base:
                     return datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')
                 for result in sorted(results, key=sort_by):
                     csv.write(f"{','.join(result)}\n")
-
-import bars
-
-class Get:
-    def __init__(self, timeframe=None, progressbar=True, api_key=None, data_dir=None, tickers_file=None, ticker=None,
-                 from_year=None, to_year=None, force=None, limit=5000):
-        self.api_key = api_key
-        self.data_dir = data_dir
-        self.tickers_file = tickers_file
-        self.ticker = ticker
-        self.tickers = []
-        self.from_year = from_year
-        self.to_year = to_year
-        self.force = force
-        self.limit = limit
-        self.timeframe = timeframe
-        self.progressbar = progressbar
-
-    def create(self):
-        params = {
-            'from_year': self.from_year, 'to_year': self.to_year, 'ticker': self.ticker, 'force': self.force, 'tickers': self.tickers,
-            'api_key': self.api_key, 'data_dir': self.data_dir, 'tickers_file': self.tickers_file,
-            'limit': self.limit, 'progressbar': self.progressbar, 'timeframe': self.timeframe
-        }
-        frame = self.timeframe[-1]
-        if frame == 'd':
-            return bars.day.Get(**params)
-        elif frame == 'm':
-            return bars.minute.Get(**params)
-        elif frame == 'h':
-            return bars.hour.Get(**params)
-
-    def perform(self):
-        object = self.create()
-        object.perform()
-        object.save()
